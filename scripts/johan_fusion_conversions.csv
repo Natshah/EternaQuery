@@ -1,0 +1,11 @@
+Find, Replace
+DesignID,Design_ID
+Design,Design_Name
+Player,Designer_Name
+Eterna_Round,Synthesis_Round
+Submission,Design_ID
+Cluster_Count_1,Cluster_Count
+KDnoFMN,KDNOFMN
+Hill_KDnoFMN,Hill_KDNOFMN
+FilterEternaNumber,Synthesis_Round
+FilterID,Design_ID

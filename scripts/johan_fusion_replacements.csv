@@ -1,0 +1,11 @@
+Find,Replace
+KDONmax,KDONMax
+KDOFFmin,KDOFFMin
+FoldChange,Fold_Change_
+dissociation,Dissociation
+KDOFFmax,KDOFFMax
+GlobalFoldChange,Global_Fold_Change_
+KDONmin,KDONMin
+foldChange,Fold_Change_
+hill,Hill_
+NumberOfClusters,Cluster_Count_
