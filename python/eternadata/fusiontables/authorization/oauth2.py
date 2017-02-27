@@ -11,7 +11,7 @@ __source_dir__ = os.path.dirname(
     inspect.getsourcefile(inspect.currentframe()))
 
 import pprint
-pprint = pprint.PrettyPrinter(indent=2, depth=2)
+pprint = pprint.PrettyPrinter(indent=2, depth=3)
 
 import logging
 logger = logging.getLogger( __name__ )
@@ -67,9 +67,10 @@ class OAuth2():
             logger.info("Please setup a client_secrets.json")
             client_secret_fn = raw_input("Enter the name of the file containing your client secret: ")
             if not os.path.exists(client_secret_fn):
+                logging.warn("file does not exist: {}".format(client_secret_fn))
                 return self.oauth2init()
             with open(client_secret_fn, 'r') as fid_in:  
-                client_secret = fid_in.read()
+                client_secret = json.loads(fid_in.read())
                 with open(self.client_secrets, 'w') as fid:
                     try:
                         fid.write(json.dumps(client_secret))
@@ -84,6 +85,8 @@ class OAuth2():
             try:
                 self._credentials = storage.get()
                 logger.debug("credentials: {}".format(self._credentials))
+                if self._credentials is None:
+                    raise Exception("credentials not found in storage")
                 return self.oauth2init()
 
             except Exception as e:
