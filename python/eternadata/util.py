@@ -55,14 +55,14 @@ def configure_logging(**config):
         logging.disable(level)
 
     logger = logging.getLogger( __name__ )
-    getattr(logger, loglevel.lower())("initializing logging configuration")
-    getattr(logger, loglevel.lower())("(config=\n{}".format(pprint.pformat(config)))
+    logger.debug("initializing logging configuration")
+    logger.debug("(config=\n{}".format(pprint.pformat(config)))
 
     
 
     try:
         import coloredlogs
-        coloredlogs.DEFAULT_LOG_FORMAT = '%(programname)s %(name)s %(levelname)s %(message)s'
+        coloredlogs.DEFAULT_LOG_FORMAT = '%(programname)s %(name)s.%(funcName)s %(levelname)s %(message)s'
         for k,v in coloredlogs.DEFAULT_FIELD_STYLES.iteritems():
             coloredlogs.DEFAULT_FIELD_STYLES[k]['bold'] = True
         coloredlogs.install(level='DEBUG')
@@ -192,7 +192,7 @@ def write_dataframe(df, fn, inplace=True, index=False, quoting=csv.QUOTE_ALL):
 
 
 def submit_command(cmd, verbose=False):
-    logger.info("submitting command ...")
+    logger.info("submitting command")
     logger.debug("{}".format(cmd))
     o, e = sp.Popen(
         cmd, shell=True, 

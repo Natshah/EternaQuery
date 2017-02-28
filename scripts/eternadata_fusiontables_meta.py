@@ -249,6 +249,7 @@ class MetaDataFusionTableFlow():
         self.df = pd.DataFrame(zip(*map(meta.get, fields)), 
             columns=fields)
         self.df = format_ID_columns(self.df)
+        self.df.sort(['Project_ID', 'Puzzle_ID'], inplace=True)
         return self.df
 
 
@@ -279,13 +280,19 @@ class MetaDataFusionTableFlow():
       
         done = []
         for index, df in source_df.iterrows():
-            if df.Synthesis_Round in done:
+            hashstr = "{}_{}_{}_{}".format(df.Synthesis_Round,
+                df.Project_ID, df.Project_Name, df.Project_Round) 
+            if hashstr in done:
                 continue
-            done += [df.Synthesis_Round]
+            done += [hashstr]
             if "Round" in df.Project_Name:
-                [Project_Name, Project_Round] = df.Project_Name.split('Round ')
-                df.Project_Round = Project_Round[0]
-                df.Project_Name = Project_Name.replace('(','').strip()
+                [Project_Name, Project_Round] = df.Project_Name.lower().split('round ')
+                df.Project_Round = Project_Round[0] 
+                Project_Name = Project_Name.replace('(','').strip()
+                if Project_Name.endswith(' -'):
+                    Project_Name = Project_Name[:-2]
+                df.Project_Name = Project_Name
+
             try:
                 df.Synthesis_Round = max(df.Synthesis_Round)
             except:
@@ -306,6 +313,7 @@ class MetaDataFusionTableFlow():
         self.logger.debug(pprint.pformat(zip(*map(meta.get, fields))))
         self.df = pd.DataFrame(zip(*map(meta.get, fields)), columns=fields)
         self.df = format_ID_columns(self.df)
+        
         return self.df
 
 
@@ -341,7 +349,7 @@ class MetaDataFusionTableFlow():
         #   >> loop over source_df.columns
         #       >> set meta['Ready'] = 'Y' if in column_names
         #       >> else meta['Ready'] = 'N' 
-    
+
 
         for column_name in column_names:
             # only mark ready if column in source df
