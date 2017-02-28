@@ -336,7 +336,17 @@ class MetaDataFusionTableFlow():
         column_names = set([__ for _ in column_names for __ in _])
         self.logger.debug(pprint.pformat(column_names))
         
+        # TODO: this does not consider columns in source df but not in meta
+        # to fix this:
+        #   >> loop over source_df.columns
+        #       >> set meta['Ready'] = 'Y' if in column_names
+        #       >> else meta['Ready'] = 'N' 
+    
+
         for column_name in column_names:
+            # only mark ready if column in source df
+            if column_name not in source_df.columns:
+                continue
             meta['Ready'] += ['Y']
             meta['Project_ID'] += list(source_df.Project_ID.unique())
             meta['Project_Name'] += list(source_df.Project_Name.unique())
