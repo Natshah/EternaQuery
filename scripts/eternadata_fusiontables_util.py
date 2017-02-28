@@ -296,8 +296,22 @@ class FusionUtil():
 
             # curl commands
             cmd_list = []
-            puz_df = source_df
+            puz_df = source_df.copy()
+            
+            # query all designs when missing puzzle names
+            mask_na = puz_df.Puzzle_Name.eq('') 
+            if mask_na.sum() > 0:
+                self.logger.debug(puz_df)
+                self.logger.debug("Setting Puzzle_Name == '' to index, will sampling 10")
+                #puz_df[puz_df.Puzzle_Name.eq('')] = puz_df[puz_df.Puzzle_Name.eq('')].sample(10)
+                #puz_df.Puzzle_Name[puz_df.Puzzle_Name.eq('')] = puz_df.Puzzle_Name[puz_df.Puzzle_Name.eq('')].index
+                puz_df = puz_df[~mask_na | mask_na.sample(10)]
+                puz_df.Puzzle_Name[mask_na] = puz_df.index
+                self.logger.debug(puz_df)
+                self.logger.debug(list(set(puz_df.index)))
+               
             puz_df = puz_df.set_index('Puzzle_Name')
+            self.logger.debug(list(set(puz_df.index)))
             for puzzle_name in list(set(puz_df.index)): 
                 cmd_list += [_format_curl(
                     get_unique(puz_df.ix[puzzle_name]['Design_ID']).pop(),
@@ -315,7 +329,7 @@ class FusionUtil():
                 except Exception, e:
                     self.logger.debug("[error]", e, "\n[error]", d)
                     continue
-            return puzzle_ids
+            return list(set(puzzle_ids))
 
 
         # get unique puzzle ids, generate curl commands

@@ -48,6 +48,10 @@ def format_ID_columns(df):
             df[c] = df[c].astype(int)
         except Exception as e:
             logger.error("df[{}].astype(int) failed\n(error={})".format(c,e))
+            logger.debug(pprint.pformat(df))
+            df.info()
+            logger.error(df[df['c']==''])
+
     return df
 
 ###############################################################################

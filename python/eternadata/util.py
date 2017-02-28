@@ -192,21 +192,23 @@ def write_dataframe(df, fn, inplace=True, index=False, quoting=csv.QUOTE_ALL):
 
 
 def submit_command(cmd, verbose=False):
-    if verbose is True:
-        logger.info("[submit]\t{}".format(cmd))
+    logger.info("submitting command ...")
+    logger.debug("{}".format(cmd))
     o, e = sp.Popen(
         cmd, shell=True, 
         stderr=sp.PIPE, stdout=sp.PIPE
     ).communicate()
     if verbose is True:
         logger.info(pprint.pformat(o), pprint.pformat(e))
+    logger.info("comand finished.")
     return o
 
 
 def map_async(func, args):
     """
     """
-    ### init multiprocessing                                                    
+    ### init multiprocessing                 
+    logger.info("mapping async ...")                                   
     mp_pool = mp.Pool(64)#mp.cpu_count() - 1)
     async_result = mp_pool.map_async(func, args)
     mp_pool.close()
@@ -214,19 +216,28 @@ def map_async(func, args):
     return async_result
 
 
-def load_json(data, async=False, keys=[]):
+def load_json(jsondata, async=False, keys=[]):
     """
     """
-    if async is True:
-        data = data.get()
-    for idx, d in enumerate(data):
-        d = json.loads(d.replace('\\r', ''))
-        try:
-            for key in keys:
-                d = d[key]
-        except:            
-            pass
-        data[idx] = d
+    data = []
+    if async is True:   
+        for d in jsondata.get():
+            d = json.loads(d.replace('\\r', ''))
+            try:
+                for key in keys:
+                    d = d[key]
+            except:            
+                pass
+            data.append(d)
+    else:
+        for idx, d in enumerate(jsondata):
+            d = json.loads(d.replace('\\r', ''))
+            try:
+                for key in keys:
+                    d = d[key]
+            except:            
+                pass
+            data.append(d)
     return data
 
 
