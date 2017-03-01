@@ -236,6 +236,49 @@ class MetaDataFusionTableFlow():
         meta = dict((_, []) for _ in fields)
         self.logger.debug(pprint.pformat(meta))
       
+
+        ### TODO: hacky...                                                                                                                                                                    
+        def get_nstates(project_ids):
+            if type(project_ids) != list:
+                project_ids = [project_ids]
+            n_states = {}
+            for project_id in project_ids:
+                curl_cmd = "curl '{}'".format(
+                    "http://staging.eternagame.org/get/?type=project&nid={}"
+                    .format(project_id))
+                o = util.submit_command(curl_cmd, verbose=False)
+                d = json.loads(o, encoding='utf-8')
+                try:
+                    project = d['data']['lab']
+                    puzzles = project['puzzles'][0]['puzzles']
+                    for puz in puzzles:
+                        #logger.warn("{}:\n{}".format(puz['title'],pprint.pformat(puz)))
+                        puznid = int(puz['nid'])
+                        try:
+                            csts, structs = puz['constraints'], puz['switch_struct']
+                            n_states[puznid] = len(structs)
+                        except:
+                            csts, structs = puz['constraints'], []
+                            n_states[puznid] = csts.count('SHAPE')-csts.count('ANTISHAPE')
+                        if type(n_states[puznid]) in [list, tuple]:
+                            n_states[puznid] = n_states[puznid][0]
+
+                        logger.debug("{:15}:\tstate_count: {}\n csts:\t{}\n switch_structs:\t{}"
+                                    .format(puz['title'], n_states[puznid], csts, structs))
+                        logger.warn("{:15}:\tstate_count: {}\t(n_shapes: {}, n_structs: {})".format(
+                            puz['title'], n_states[puznid],
+                            csts.count('SHAPE') - csts.count('ANTISHAPE'),
+                            len(structs)
+                        ))
+                    self.logger.debug("N States = " + str(n_states))
+                except Exception as e:
+                    self.logger.error(e)
+                    exit()
+            return n_states
+
+        puzzle_states = get_nstates(list(source_df.Project_ID.unique())) 
+        logger.debug('State_Counts:\n{}'.format(pprint.pformat(puzzle_states)))
+         
         for Puzzle_ID in set(source_df.index):  
             puzzles_df = source_df.ix[Puzzle_ID]
             meta['Puzzle_ID']    += [Puzzle_ID]
@@ -243,7 +286,15 @@ class MetaDataFusionTableFlow():
             meta['Project_Name'] += list(puzzles_df.Project_Name.unique())
             meta['Puzzle_Name']  += list(puzzles_df.Puzzle_Name.unique())
             meta['Design_Count']  += [len(puzzles_df)] 
-            meta['State_Count']  += ['2']
+            
+            try:
+                meta['State_Count'] += [puzzle_states[Puzzle_ID]]
+                logger.warn("State_Count[Puzzle_ID = {}]: {}"
+                            .format(Puzzle_ID, meta['State_Count'][-1]))
+            except Exception as e:
+                logger.warn("error: {}".format(e))
+                logger.warn("puzzle_states: {}".format(puzzle_states))
+                exit()#meta['State_Count']  += [2]
         
         self.logger.debug(pprint.pformat(zip(*map(meta.get, fields))))
         self.df = pd.DataFrame(zip(*map(meta.get, fields)), 
@@ -279,24 +330,25 @@ class MetaDataFusionTableFlow():
         meta = dict((_, []) for _ in fields)
         self.logger.debug(pprint.pformat(meta))
       
-        source_df.Synthesis_Round = source_df.Synthesis_Round.max()
-        groups = source_df.groupby(['Project_ID', 'Project_Round', 'Project_Name']).groups
+        #source_df.Synthesis_Round = source_df.Synthesis_Round.max()
+        groups = source_df.groupby(['Synthesis_Round', 'Project_ID', 'Project_Round', 'Project_Name']).groups
         groups = dict((k,(len(v),v.pop(0))) for k, v in groups.iteritems())
         logger.debug(groups)
         logger.debug(len(groups))
 
         for idx, group in enumerate(groups.iteritems()):  
             [groupkey, (groupsize, groupval)] = group
-            logger.warn("\n(idx={}".format(idx) + " group={})".format(group))
+            logger.debug("\n(idx={}".format(idx) + " group={})".format(group))
             print "groupsize:"+str(groupsize)
             df = source_df.loc[groupval, ['Project_ID', 'Project_Name', 
                 'Synthesis_Round', 'Project_Round', 'Puzzle_ID']].to_dict()
 
-            logger.warn("\n{}".format(pprint.pformat(df)))
-            df['Project_ID'] = groupkey[0]
-            df['Project_Round'] = groupkey[1]
-            df['Project_Name'] = groupkey[2]
-            logger.warn("\n{}".format(pprint.pformat(df)))
+            logger.debug("\n{}".format(pprint.pformat(df)))
+            df['Synthesis_Round'] = groupkey[0]
+            df['Project_ID'] =  groupkey[1]
+            df['Project_Round'] =  groupkey[2]
+            df['Project_Name'] =  groupkey[3]
+            logger.debug("\n{}".format(pprint.pformat(df)))
 
             if "round" in df['Project_Name'].lower():
                 [Project_Name, Project_Round] = ['','']
@@ -324,9 +376,11 @@ class MetaDataFusionTableFlow():
                 .format(df['Synthesis_Round'], "{Design_ID}")
             ]
           
-        self.logger.warn(pprint.pformat(zip(*map(meta.get, fields))))
+        self.logger.debug(pprint.pformat(zip(*map(meta.get, fields))))
         self.df = pd.DataFrame(zip(*map(meta.get, fields)), columns=fields)
         self.df = format_ID_columns(self.df)
+        self.df.sort(['Project_plus_Round_ID'], inplace=True)
+  
         return self.df
 
 
@@ -363,20 +417,24 @@ class MetaDataFusionTableFlow():
         #       >> set meta['Ready'] = 'Y' if in column_names
         #       >> else meta['Ready'] = 'N' 
 
+        
 
         for column_name in column_names:
             # only mark ready if column in source df
             if column_name not in source_df.columns:
                 continue
-            meta['Ready'] += ['Y']
             meta['Project_ID'] += list(source_df.Project_ID.unique())
             meta['Project_Name'] += list(source_df.Project_Name.unique())
-            meta['Column_Name'] += [column_name]
-            meta['Notes'] += ['']
+            for project in list(source_df.Project_Name.unique()):
+                meta['Ready'] += ['Y']
+                meta['Column_Name'] += [column_name]
+                meta['Notes'] += ['']
 
         self.logger.debug(pprint.pformat(zip(*map(meta.get, fields))))
         self.df = pd.DataFrame(zip(*map(meta.get, fields)), columns=fields)
         self.df = format_ID_columns(self.df)
+        self.df.sort(['Project_ID'], inplace=True)
+        #self.df.sort(['Column_Name'], inplace=True)
         return self.df
 
 

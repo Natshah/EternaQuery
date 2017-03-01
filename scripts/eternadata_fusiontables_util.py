@@ -373,7 +373,7 @@ class FusionUtil():
 
             o = util.submit_command(curl_cmd, verbose=False)
             d = json.loads(o, encoding='utf-8')
-            project_name, project_round = "", ""
+            project_name, project_round, puzzle_names = "", "", {}
             try:
                 project = d['data']['lab']
                 project_name = project['title'].encode('utf-8')
@@ -415,9 +415,10 @@ class FusionUtil():
                 project_name, project_round
             except Exception as e:
                 self.logger.error(e)
+
             self.logger.debug("Project_Info\n(" + 
-                "Project_ID: {},\nProject_Name: {}\nProject_Round: {}\nPuzzle_Names: | {} |)".format(
-                project_id, project_name, project_round, ' | '.join(map(str, puzzle_names.values()))))
+                              "Project_ID: {},\nProject_Name: {}\nProject_Round: {}\nPuzzle_Names: | {} |)".format(
+                              project_id, project_name, project_round, ' | '.join(map(str, puzzle_names.values()))))
             return (project_name, project_round, puzzle_names)
                   
       
