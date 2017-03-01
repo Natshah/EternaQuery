@@ -268,7 +268,8 @@ class MetaDataFusionTableFlow():
         table_id = self.table_map[table_name]
         
         # init source df
-        source_df = self.df_cache[self.options.source]
+        source_df = self.df_cache[self.options.source].copy()
+        #source_df = source_df.set_index('Project_ID')
 
         #
         table = self.ft_client.Table(table_id)
@@ -278,42 +279,54 @@ class MetaDataFusionTableFlow():
         meta = dict((_, []) for _ in fields)
         self.logger.debug(pprint.pformat(meta))
       
-        done = []
-        for index, df in source_df.iterrows():
-            hashstr = "{}_{}_{}_{}".format(df.Synthesis_Round,
-                df.Project_ID, df.Project_Name, df.Project_Round) 
-            if hashstr in done:
-                continue
-            done += [hashstr]
-            if "Round" in df.Project_Name:
-                [Project_Name, Project_Round] = df.Project_Name.lower().split('round ')
-                df.Project_Round = Project_Round[0] 
+        source_df.Synthesis_Round = source_df.Synthesis_Round.max()
+        groups = source_df.groupby(['Project_ID', 'Project_Round', 'Project_Name']).groups
+        groups = dict((k,(len(v),v.pop(0))) for k, v in groups.iteritems())
+        logger.debug(groups)
+        logger.debug(len(groups))
+
+        for idx, group in enumerate(groups.iteritems()):  
+            [groupkey, (groupsize, groupval)] = group
+            logger.warn("\n(idx={}".format(idx) + " group={})".format(group))
+            print "groupsize:"+str(groupsize)
+            df = source_df.loc[groupval, ['Project_ID', 'Project_Name', 
+                'Synthesis_Round', 'Project_Round', 'Puzzle_ID']].to_dict()
+
+            logger.warn("\n{}".format(pprint.pformat(df)))
+            df['Project_ID'] = groupkey[0]
+            df['Project_Round'] = groupkey[1]
+            df['Project_Name'] = groupkey[2]
+            logger.warn("\n{}".format(pprint.pformat(df)))
+
+            if "round" in df['Project_Name'].lower():
+                [Project_Name, Project_Round] = ['','']
+                if 'Round' in df['Project_Name']:
+                    [Project_Name, Project_Round] = df['Project_Name'].split('Round')
+                else:
+                    [Project_Name, Project_Round] = df['Project_Name'].split('round')
+    
+                df['Project_Round'] = Project_Round = Project_Round.strip()[0] 
                 Project_Name = Project_Name.replace('(','').strip()
                 if Project_Name.endswith(' -'):
                     Project_Name = Project_Name[:-2]
-                df.Project_Name = Project_Name
-
-            try:
-                df.Synthesis_Round = max(df.Synthesis_Round)
-            except:
-                pass
+                df['Project_Name'] = Project_Name
+           
 
             meta['Ready'] += ['Y']
-            meta['Project'] += ["{}".format(df.Project_Name)]
-            meta['Project_Round'] += [df.Project_Round]
+            meta['Project'] += [df['Project_Name']]
+            meta['Project_Round'] += [df['Project_Round']]
             meta['Project_plus_Round'] += ["{} Round {}".format(
-                df.Project_Name, df.Project_Round)] # max?
-            meta['Project_plus_Round_ID'] += [df.Project_ID]
-            meta['Synthesis_Round'] += [df.Synthesis_Round]
+                df['Project_Name'], df['Project_Round'])] # max?
+            meta['Project_plus_Round_ID'] += [df['Project_ID']]
+            meta['Synthesis_Round'] += [df['Synthesis_Round']]
             meta['Histogram_URL_Template'] += [
                 "https://s3.amazonaws.com/eterna/labs/histograms_R{}/{}.png"
-                .format(df.Synthesis_Round, "{Design_ID}")
+                .format(df['Synthesis_Round'], "{Design_ID}")
             ]
           
-        self.logger.debug(pprint.pformat(zip(*map(meta.get, fields))))
+        self.logger.warn(pprint.pformat(zip(*map(meta.get, fields))))
         self.df = pd.DataFrame(zip(*map(meta.get, fields)), columns=fields)
         self.df = format_ID_columns(self.df)
-        
         return self.df
 
 

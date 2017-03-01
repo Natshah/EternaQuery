@@ -121,7 +121,9 @@ class FusionUtil():
             print '[FusionUtil.apply_mode(mode={})]'.format(method)
             self.df_map[method] = getattr(self, method)()
             if self.options.verbose:
-                print self.df_map
+                logger.info("{}: {}".format(method, 
+                        pprint.pformat(self.df_map[method].head())))
+                self.df_map[method].info()
             return True
         return False
 
@@ -310,12 +312,15 @@ class FusionUtil():
                 self.logger.debug(puz_df)
                 self.logger.debug(list(set(puz_df.index)))
                
-            puz_df = puz_df.set_index('Puzzle_Name')
+            puz_df = puz_df.set_index(['Puzzle_Name', 'Synthesis_Round'])
             self.logger.debug(list(set(puz_df.index)))
-            for puzzle_name in list(set(puz_df.index)): 
+            for puzzle_name in list(set(puz_df.index)):
                 cmd_list += [_format_curl(
                     get_unique(puz_df.ix[puzzle_name]['Design_ID']).pop(),
                     nid_type='solnid')]
+                logger.debug("querying db for puzzle: {}".format(puzzle_name))
+                logger.debug("query solnid: {}".format(
+                    get_unique(puz_df.ix[puzzle_name]['Design_ID']).pop()))
 
             # apply commands async
             results_async = util.map_async(util.submit_command, cmd_list)
@@ -346,9 +351,15 @@ class FusionUtil():
         eterna_data = [map(_.get, col_names) for d in data for _ in d]
         #self.logger.debug(pprint.pformat(eterna_data))
         
-        # write data to file
+        # write data to file, convert types for successful join 
         self.df = pd.DataFrame(eterna_data, columns=col_names) 
-        #pprint.pprint(self.df)
+        self.df = self.df.convert_objects(convert_numeric=True)
+
+        print self.df.dtypes
+        print source_df.dtypes
+        self.df = source_df.join(self.df.set_index('Design_ID'), 
+                                  on='Design_ID', how='left')
+        pprint.pprint(self.df)
 
         ### TODO: hacky... 
         def get_project_info(project_id):
@@ -367,6 +378,16 @@ class FusionUtil():
                 project = d['data']['lab']
                 project_name = project['title'].encode('utf-8')
                 project_round = project['puzzles'][0]['round']
+                if "round" in project_name.lower():
+                    project_round = project_name.lower().split('round ')[-1][0]
+                    if 'Round' in project_name:
+                        project_name = project_name.split('Round ')[0]
+                    else: 
+                        project_name = project_name.split('round ')[0]
+                    # clean up project name
+                    project_name = project_name.replace('(', '').strip()
+                    if project_name.endswith('-'):
+                        project_name = project_name[:-1].strip()
                 
                 puzzles = project['puzzles'][0]['puzzles']
                 puzzle_names = dict(
@@ -386,36 +407,50 @@ class FusionUtil():
                             n_states = puzzle['constraints'].count('SHAPE')
                             self.logger.debug("N States = " + str(n_states))
                 except Exception as e:
-                    self.loggererror(e)
+                    self.logger.error(e)
                 
             except Exception as e:
-                self.loggererror(e)
+                self.logger.error(e)
             try:
                 project_name, project_round
             except Exception as e:
-                self.loggererror(e)
-            self.logger.info(
-                map(str, [project_id, "-->", project_name, project_round]))
+                self.logger.error(e)
+            self.logger.debug("Project_Info\n(" + 
+                "Project_ID: {},\nProject_Name: {}\nProject_Round: {}\nPuzzle_Names: | {} |)".format(
+                project_id, project_name, project_round, ' | '.join(map(str, puzzle_names.values()))))
             return (project_name, project_round, puzzle_names)
                   
-
-        project_info = get_project_info(
-            get_unique(self.df['Project_ID']).pop())
-        self.logger.debug("Project_Info: {}"
-            .format(pprint.pformat(project_info)))
       
-        try:
-            self.df['Project_Name'] = project_info[0]
-            self.df['Project_Round'] = project_info[1]
-            # assumes same as project_round
-            self.df['Puzzle_Round'] = project_info[1] 
+        groups = self.df.groupby(['Project_ID', 'Project_Round']).groups
+        logger.debug(groups.keys())
 
-        except Exception as e:
-            print e
-            self.df = None
-            return self.df
+        self.df['Project_Name'] = self.df.Project_ID.map(lambda x: '')
+        for idx, (gkey, groupindex) in enumerate(groups.iteritems()):
+            groupmask = groupindex
+            logger.debug("{}, {}, {}".format(idx,gkey,
+                groupmask[:min(5, len(groupmask))]))
+            project_info = get_project_info(gkey[0])
+            logger.debug(project_info)
+            logger.debug(len(self.df[self.df.index.isin(groupindex)]))
+            try:
+                logger.debug(self.df[self.df.index.isin(groupindex)].head())
+                self.df.Project_Name[self.df.index.isin(groupindex)] = project_info[0]
+                self.df.Project_Round[self.df.index.isin(groupindex)] = project_info[1]
+                self.df.Puzzle_Round[self.df.index.isin(groupindex)] = project_info[1]
+                logger.debug(self.df[self.df.index.isin(groupindex)].head())
+            
+            except Exception as e:
+                logger.error(e)
+                logger.debug('iterating groupindex: {}'.format(groupindex))
+                for gidx in groupindex:
+                    logger.debug("df[gidx={}]: {}"
+                                 .format(gidx,pprint.pformat(self.df[gidx])))
+                    self.df.Project_Name[gidx] = project_info[0] #self.df.Project_ID.map(lambda x: '')
+                    self.df.Project_Round[gidx] = project_info[1]
+                    self.df.Puzzle_Round[gidx] = project_info[1] 
+            
 
-
+        logger.debug(self.df.head())
         if self.options.outfile:
             util.write_dataframe(self.df, self.options.outfile)
         return self.df
@@ -446,7 +481,7 @@ class FusionUtil():
                     n_states[puz['nid']] = puz['constraints'].count('SHAPE')
                 self.logger.debug("N States = " + str(n_states))                
             except Exception as e:
-                self.loggererror(e)
+                self.logger.error(e)
             return n_states
      
      
